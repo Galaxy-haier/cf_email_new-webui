@@ -1,3 +1,38 @@
+获取域名列表 API
+
+通过 Open API 获取 Worker 支持的所有邮箱域名，无需认证。
+
+
+res = requests.get(
+    "https://<worker 域名>/open_api/settings"
+)
+
+# 返回值示例
+# {
+#     "announcement": "",
+#     "defaultDomains": ["zsxh.dpdns.org"],
+#     "domains": [
+#         "zsxh.dpdns.org",
+#         "148143.eu.cc",
+#         "zsxh.eu.cc",
+#         "bendan.eu.cc",
+#         "zsxh.me"
+#     ],
+#     "needAuth": false,
+#     "enableUserCreateEmail": true,
+#     "version": "v1.4.0",
+#     ...
+# }
+
+print(res.json()["domains"])
+
+本项目在 server.js 中对该接口做了代理封装：
+
+GET /api/domains  →  返回 { "domains": [...] }
+
+前端初始化时会调用此接口拉取域名列表，动态填充下拉菜单。
+
+
 新建邮箱地址 API
 注意：地址 JWT vs 用户 JWT
 
