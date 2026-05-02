@@ -34,6 +34,18 @@ app.post('/api/create', async (req, res) => {
     }
 });
 
+// 获取域名列表
+app.get('/api/domains', async (req, res) => {
+    try {
+        const response = await fetch(`${WORKER_URL}/open_api/settings`);
+        const data = await response.json();
+        const domains = data.domains || data.defaultDomains || [DOMAIN];
+        res.json({ domains });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // 获取邮件列表
 app.get('/api/mails', async (req, res) => {
     const { address, limit = 10, offset = 0 } = req.query;

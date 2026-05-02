@@ -119,7 +119,6 @@ header {
     background: var(--glass);
     border: 1px solid var(--border);
     border-radius: 12px;
-    overflow: hidden;
     margin-bottom: 16px;
     transition: all 0.3s;
 }
@@ -130,7 +129,7 @@ header {
 }
 
 .email-box input {
-    flex: 1;
+    flex: 0 0 60%;
     background: none;
     border: none;
     padding: 14px 18px;
@@ -139,6 +138,7 @@ header {
     font-family: 'Consolas', 'Monaco', monospace;
     outline: none;
     min-width: 0;
+    border-radius: 12px 0 0 12px;
 }
 
 .email-box input::placeholder {
@@ -146,52 +146,118 @@ header {
     font-family: inherit;
 }
 
+.email-at {
+    color: var(--text-muted);
+    font-size: 16px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    padding: 0 4px;
+    flex-shrink: 0;
+    user-select: none;
+}
+
 /* Domain Select */
 .domain-select-wrapper {
     position: relative;
     display: flex;
     align-items: center;
-    border-left: 1px solid var(--border);
-    padding: 0 4px;
-    flex-shrink: 0;
+    flex: 1;
+    min-width: 0;
 }
 
-.domain-select {
-    appearance: none;
-    -webkit-appearance: none;
-    background: none;
-    border: none;
+/* Custom Select */
+.custom-select {
+    position: relative;
+    width: 100%;
+}
+
+.custom-select-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 14px 12px;
     color: var(--text-muted);
     font-size: 13px;
     font-family: 'Consolas', 'Monaco', monospace;
-    padding: 14px 28px 14px 12px;
     cursor: pointer;
-    outline: none;
     transition: color 0.3s;
+    white-space: nowrap;
+    overflow: hidden;
+    border-radius: 0 12px 12px 0;
+    outline: none;
+    user-select: none;
 }
 
-.domain-select:hover {
+.custom-select-trigger:hover {
     color: var(--text);
 }
 
-.domain-select option {
-    background: var(--bg-card);
-    color: var(--text);
-    font-size: 13px;
-}
-
-.domain-select-arrow {
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--text-muted);
+.custom-select-trigger i {
     font-size: 10px;
+    transition: transform 0.3s ease;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.custom-select.open .custom-select-trigger i {
+    transform: rotate(180deg);
+}
+
+.custom-select-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    z-index: 50;
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
     pointer-events: none;
+    transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    overflow: hidden;
+    backdrop-filter: blur(20px);
+    visibility: hidden;
+}
+
+.custom-select.open .custom-select-dropdown {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+    visibility: visible;
+}
+
+.custom-select-option {
+    padding: 12px 14px;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.custom-select-option:last-child {
+    border-bottom: none;
+}
+
+.custom-select-option:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+}
+
+.custom-select-option.selected {
+    color: var(--primary-light);
+    background: rgba(99, 102, 241, 0.1);
 }
 
 .email-box .icon-btn {
-    border-radius: 0;
+    border-radius: 0 12px 12px 0;
     border: none;
     border-left: 1px solid var(--border);
     width: 52px;

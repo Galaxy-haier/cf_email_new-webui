@@ -1,6 +1,7 @@
 // ========== 状态 ==========
 let currentAddress = '';
 let currentJWT = '';
+let currentDomain = '';
 let mailsCache = [];
 let autoRefreshInterval = null;
 let isRefreshing = false;
@@ -9,13 +10,15 @@ let historyData = [];
 // ========== 配置 ==========
 const DOMAINS = [
     'zsxh.dpdns.org'
-    // 在此添加更多域名，如：'your-other-domain.com'
 ];
 
 // ========== DOM 元素 ==========
 const emailInput = document.getElementById('emailInput');
 const copyBtn = document.getElementById('copyBtn');
-const domainSelect = document.getElementById('domainSelect');
+const customSelect = document.getElementById('customSelect');
+const customSelectTrigger = document.getElementById('customSelectTrigger');
+const customSelectValue = document.getElementById('customSelectValue');
+const customSelectDropdown = document.getElementById('customSelectDropdown');
 const generateBtn = document.getElementById('generateBtn');
 const customBtn = document.getElementById('customBtn');
 const refreshBtn = document.getElementById('refreshBtn');
@@ -169,18 +172,31 @@ function formatRelativeTime(ts) {
 
 // ========== API 调用 ==========
 function getSelectedDomain() {
-    return domainSelect.value || DOMAINS[0];
+    return currentDomain || DOMAINS[0];
 }
 
 function extractDomain(address) {
-    if (!address) return DOMAINS[0];
+    if (!address) return '';
     const parts = address.split('@');
-    return parts[1] || DOMAINS[0];
+    return parts[1] || '';
+}
+
+function extractUsername(address) {
+    if (!address) return '';
+    const parts = address.split('@');
+    return parts[0] || '';
 }
 
 function setDomainSelect(domain) {
-    if (DOMAINS.includes(domain)) {
-        domainSelect.value = domain;
+    if (!domain || !DOMAINS.includes(domain)) return;
+    currentDomain = domain;
+    customSelectValue.textContent = domain;
+    document.querySelectorAll('.custom-select-option').forEach(opt => {
+        opt.classList.toggle('selected', opt.dataset.value === domain);
+    });
+    const username = extractUsername(currentAddress);
+    if (username) {
+        currentAddress = `${username}@${domain}`;
     }
 }
 
@@ -211,7 +227,8 @@ async function generateEmail(name = null, prefix = true) {
         if (data.address) {
             currentAddress = data.address;
             currentJWT = data.jwt || '';
-            emailInput.value = currentAddress;
+            emailInput.value = extractUsername(currentAddress);
+            setDomainSelect(extractDomain(currentAddress));
             mailsCache = [];
             renderMails([]);
             addToHistory(currentAddress);
@@ -425,7 +442,7 @@ function renderHistoryList(filter = '') {
 async function switchToHistory(address) {
     currentAddress = address;
     currentJWT = '';
-    emailInput.value = address;
+    emailInput.value = extractUsername(address);
     setDomainSelect(extractDomain(address));
     mailsCache = [];
     renderMails([]);
@@ -454,8 +471,8 @@ function stopAutoRefresh() {
 generateBtn.addEventListener('click', () => generateEmail());
 
 copyBtn.addEventListener('click', () => {
-    if (!emailInput.value) return;
-    navigator.clipboard.writeText(emailInput.value).then(() => {
+    if (!currentAddress) return;
+    navigator.clipboard.writeText(currentAddress).then(() => {
         copyBtn.classList.add('copied');
         copyBtn.innerHTML = '<i class="fas fa-check"></i>';
         showToast('邮箱地址已复制');
@@ -481,6 +498,10 @@ autoRefreshToggle.addEventListener('change', () => {
 customBtn.addEventListener('click', () => {
     customModal.classList.add('active');
     customName.focus();
+    const suffix = document.querySelector('.domain-suffix');
+    if (suffix) {
+        suffix.textContent = '@' + getSelectedDomain();
+    }
 });
 
 function closeCustomModal() {
@@ -537,11 +558,60 @@ clearHistoryBtn.addEventListener('click', () => {
     }
 });
 
-// ========== 初始化 ==========
-function initDomainSelect() {
-    domainSelect.innerHTML = DOMAINS.map(d => `<option value="${d}">${d}</option>`).join('');
+// ========== 自定义下拉菜单 ==========
+function toggleCustomSelect() {
+    customSelect.classList.toggle('open');
 }
 
-initDomainSelect();
-historyData = loadHistory();
-showToast('临时邮箱控制台已就绪', 'fa-info-circle');
+function closeCustomSelect() {
+    customSelect.classList.remove('open');
+}
+
+customSelectTrigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleCustomSelect();
+});
+
+customSelectDropdown.addEventListener('click', (e) => {
+    const option = e.target.closest('.custom-select-option');
+    if (!option) return;
+    setDomainSelect(option.dataset.value);
+    closeCustomSelect();
+});
+
+document.addEventListener('click', (e) => {
+    if (!customSelect.contains(e.target)) {
+        closeCustomSelect();
+    }
+});
+
+// ========== 初始化 ==========
+function initDomainSelect() {
+    if (DOMAINS.length === 0) return;
+    customSelectDropdown.innerHTML = DOMAINS.map(d =>
+        `<div class="custom-select-option ${d === currentDomain ? 'selected' : ''}" data-value="${d}">${d}</div>`
+    ).join('');
+    if (!currentDomain || !DOMAINS.includes(currentDomain)) {
+        currentDomain = DOMAINS[0];
+    }
+    customSelectValue.textContent = currentDomain;
+}
+
+async function loadDomains() {
+    try {
+        const res = await fetch('/api/domains');
+        const data = await res.json();
+        if (data.domains && data.domains.length > 0) {
+            DOMAINS.length = 0;
+            DOMAINS.push(...data.domains);
+        }
+    } catch (err) {
+        console.error('加载域名列表失败:', err);
+    }
+    initDomainSelect();
+}
+
+loadDomains().then(() => {
+    historyData = loadHistory();
+    showToast('临时邮箱控制台已就绪', 'fa-info-circle');
+});
