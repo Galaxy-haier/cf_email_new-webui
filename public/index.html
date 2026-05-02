@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>临时邮箱控制台</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <div class="bg-gradient"></div>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i class="fas fa-envelope-open-text"></i>
+                <h1>临时邮箱控制台</h1>
+            </div>
+            <p class="subtitle">一键生成 · 自动刷新 · 智能提取验证码</p>
+        </header>
+
+        <div class="main-card">
+            <div class="email-display-section">
+                <label>当前邮箱地址</label>
+                <div class="email-box">
+                    <input type="text" id="emailInput" readonly placeholder="点击生成按钮创建邮箱">
+                    <div class="domain-select-wrapper">
+                        <select id="domainSelect" class="domain-select">
+                            <option value="zsxh.dpdns.org">zsxh.dpdns.org</option>
+                        </select>
+                        <i class="fas fa-chevron-down domain-select-arrow"></i>
+                    </div>
+                    <button class="icon-btn copy-btn" id="copyBtn" title="复制地址">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+                <div class="email-actions">
+                    <button class="btn btn-primary" id="generateBtn">
+                        <i class="fas fa-bolt"></i>
+                        <span>一键生成</span>
+                    </button>
+                    <button class="btn btn-secondary" id="customBtn">
+                        <i class="fas fa-pen"></i>
+                        <span>自定义</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="refresh-section">
+                <div class="refresh-info">
+                    <div class="auto-refresh">
+                        <label class="switch">
+                            <input type="checkbox" id="autoRefreshToggle">
+                            <span class="slider"></span>
+                        </label>
+                        <span class="switch-label">自动刷新 <span class="badge">5s</span></span>
+                    </div>
+                    <span class="last-update" id="lastUpdate">未刷新</span>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-history" id="historyBtn">
+                        <i class="fas fa-history"></i>
+                        <span>历史邮箱</span>
+                    </button>
+                    <button class="btn btn-refresh" id="refreshBtn">
+                        <i class="fas fa-sync-alt" id="refreshIcon"></i>
+                        <span>刷新邮件</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="mails-section">
+            <div class="section-header">
+                <h2><i class="fas fa-inbox"></i> 邮件列表</h2>
+                <span class="mail-count" id="mailCount">0 封邮件</span>
+            </div>
+            <div class="mails-list" id="mailsList">
+                <div class="empty-state">
+                    <i class="fas fa-paper-plane"></i>
+                    <p>暂无邮件</p>
+                    <span>生成邮箱后等待接收邮件</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 自定义邮箱弹窗 -->
+    <div class="modal" id="customModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>自定义邮箱地址</h3>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <input type="text" id="customName" placeholder="输入用户名">
+                    <span class="domain-suffix">@zsxh.dpdns.org</span>
+                </div>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="enablePrefix" checked>
+                    <span>启用前缀</span>
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelCustom">取消</button>
+                <button class="btn btn-primary" id="confirmCustom">创建</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 历史邮箱弹窗 -->
+    <div class="modal" id="historyModal">
+        <div class="modal-content modal-xl">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fas fa-history"></i>
+                    <h3>历史邮箱</h3>
+                    <span class="history-count" id="historyCount">0 个</span>
+                </div>
+                <div class="modal-header-actions">
+                    <button class="btn btn-sm btn-danger" id="clearHistoryBtn" title="清空历史">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                    <button class="modal-close" id="historyModalClose">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="history-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="historySearch" placeholder="搜索邮箱地址...">
+                </div>
+                <div class="history-list" id="historyList">
+                    <div class="empty-state">
+                        <i class="fas fa-clock"></i>
+                        <p>暂无历史记录</p>
+                        <span>生成的邮箱将自动保存到这里</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 邮件详情弹窗 -->
+    <div class="modal" id="mailModal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>邮件详情</h3>
+                <button class="modal-close" id="mailModalClose">&times;</button>
+            </div>
+            <div class="modal-body" id="mailModalBody">
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div class="toast" id="toast">
+        <i class="fas fa-check-circle"></i>
+        <span id="toastMsg">操作成功</span>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

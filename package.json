@@ -1,0 +1,14 @@
+{
+  "name": "temp-mail-console",
+  "version": "1.0.0",
+  "description": "临时邮箱控制台 - 一键生成、刷新、提取验证码",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  }
+}
