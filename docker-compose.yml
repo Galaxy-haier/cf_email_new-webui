@@ -1,0 +1,9 @@
+services:
+  app:
+    build: .
+    container_name: cf_email_webui
+    ports:
+      - "${PORT:-3456}:3456"
+    env_file:
+      - .env
+    restart: unless-stopped

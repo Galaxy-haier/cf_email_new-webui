@@ -14,20 +14,22 @@
 
 ## 快速开始
 
-### 1. 克隆仓库
+### 方式一：本地运行
+
+#### 1. 克隆仓库
 
 ```bash
 git clone <你的仓库地址>
 cd temp-mail-console
 ```
 
-### 2. 安装依赖
+#### 2. 安装依赖
 
 ```bash
 npm install
 ```
 
-### 3. 配置环境变量
+#### 3. 配置环境变量
 
 ```bash
 cp .env.example .env
@@ -42,13 +44,51 @@ DEFAULT_DOMAIN=your-domain.com
 PORT=3456
 ```
 
-### 4. 启动服务
+#### 4. 启动服务
 
 ```bash
 npm start
 ```
 
 访问 http://localhost:3456 即可使用。
+
+### 方式二：Docker 部署
+
+#### 1. 克隆仓库并进入目录
+
+```bash
+git clone <你的仓库地址>
+cd temp-mail-console
+```
+
+#### 2. 配置环境变量
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env` 文件，填入你的 Cloudflare Worker 信息。
+
+#### 3. 构建并启动容器
+
+```bash
+docker-compose up -d --build
+```
+
+访问 http://localhost:3456 即可使用。
+
+#### 常用命令
+
+```bash
+# 查看日志
+docker-compose logs -f
+
+# 停止服务
+docker-compose down
+
+# 重启服务
+docker-compose restart
+```
 
 ## 项目结构
 
