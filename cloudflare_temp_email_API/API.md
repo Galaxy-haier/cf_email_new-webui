@@ -10,13 +10,10 @@ res = requests.get(
 # 返回值示例
 # {
 #     "announcement": "",
-#     "defaultDomains": ["zsxh.dpdns.org"],
+#     "defaultDomains": ["your-domain.com"],
 #     "domains": [
-#         "zsxh.dpdns.org",
-#         "148143.eu.cc",
-#         "zsxh.eu.cc",
-#         "bendan.eu.cc",
-#         "zsxh.me"
+#         "your-domain.com",
+#         "another-domain.com"
 #     ],
 #     "needAuth": false,
 #     "enableUserCreateEmail": true,

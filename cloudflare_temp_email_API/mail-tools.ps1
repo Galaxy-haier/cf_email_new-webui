@@ -2,18 +2,21 @@ function Get-LatestMailCode {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
-        [string]$Address
+        [string]$Address,
+
+        [Parameter(Mandatory = $true)]
+        [string]$WorkerBaseUrl,
+
+        [Parameter(Mandatory = $true)]
+        [string]$AdminAuth
     )
 
-    $workerBaseUrl = 'https://linshiyouxiang.zsxh.dpdns.org'
-    $adminAuth = '314119Aa'
-
     $encodedAddress = [System.Uri]::EscapeDataString($Address)
-    $uri = "$workerBaseUrl/admin/mails?address=$encodedAddress&limit=1&offset=0"
+    $uri = "$WorkerBaseUrl/admin/mails?address=$encodedAddress&limit=1&offset=0"
 
     try {
         $response = Invoke-RestMethod -Method Get -Uri $uri -Headers @{
-            'x-admin-auth' = $adminAuth
+            'x-admin-auth' = $AdminAuth
         }
     }
     catch {

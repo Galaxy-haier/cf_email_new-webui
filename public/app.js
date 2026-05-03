@@ -8,9 +8,7 @@ let isRefreshing = false;
 let historyData = [];
 
 // ========== 配置 ==========
-const DOMAINS = [
-    'zsxh.dpdns.org'
-];
+const DOMAINS = [];
 
 // ========== DOM 元素 ==========
 const emailInput = document.getElementById('emailInput');

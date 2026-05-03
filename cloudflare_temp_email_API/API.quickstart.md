@@ -1,13 +1,21 @@
 # 临时邮箱 API 快速记录
 
-日期：2026-03-30
+## 配置说明
+
+使用前请先在项目根目录创建 `.env` 文件，参考 `.env.example` 填入你的实际配置：
+
+```env
+WORKER_URL=https://your-worker.your-domain.workers.dev
+ADMIN_AUTH=your-admin-password
+DEFAULT_DOMAIN=your-domain.com
+```
 
 ## 已验证信息
 
-- Worker 地址：`https://linshiyouxiang.zsxh.dpdns.org`
+- Worker 地址：`https://<your-worker>`
 - 匿名创建：关闭
-- 管理员密码：`314119Aa`
-- 有效邮箱域名：`zsxh.dpdns.org`
+- 管理员密码：`<your-admin-password>`
+- 有效邮箱域名：`<your-domain>`
 
 ## 创建邮箱
 
@@ -17,12 +25,12 @@
 $body = @{
   enablePrefix = $true
   name = 'testnode01'
-  domain = 'zsxh.dpdns.org'
+  domain = '<your-domain>'
 } | ConvertTo-Json -Compress
 
 Invoke-RestMethod -Method Post `
-  -Uri 'https://linshiyouxiang.zsxh.dpdns.org/admin/new_address' `
-  -Headers @{ 'x-admin-auth' = '314119Aa' } `
+  -Uri 'https://<your-worker>/admin/new_address' `
+  -Headers @{ 'x-admin-auth' = '<your-admin-password>' } `
   -ContentType 'application/json' `
   -Body $body
 ```
@@ -31,8 +39,8 @@ Invoke-RestMethod -Method Post `
 
 ```json
 {
-  "address": "testnode01@zsxh.dpdns.org",
-  "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZGRyZXNzIjoidGVzdG5vZGUwMUB6c3hoLmRwZG5zLm9yZyIsImFkZHJlc3NfaWQiOjIwfQ.S5m-I7KNrAzeT4dKTBdTi-CXCmbILkB8hyTSiol3lc4",
+  "address": "testnode01@your-domain.com",
+  "jwt": "eyJhbGciOiJIUzI1NiIs...",
   "password": null
 }
 ```
@@ -51,8 +59,8 @@ Invoke-RestMethod -Method Post `
 
 ```powershell
 Invoke-RestMethod -Method Get `
-  -Uri 'https://linshiyouxiang.zsxh.dpdns.org/admin/mails?address=bd2p3a1m@zsxh.dpdns.org&limit=1&offset=0' `
-  -Headers @{ 'x-admin-auth' = '314119Aa' }
+  -Uri 'https://<your-worker>/admin/mails?address=test@your-domain.com&limit=1&offset=0' `
+  -Headers @{ 'x-admin-auth' = '<your-admin-password>' }
 ```
 
 说明：
@@ -65,8 +73,8 @@ Invoke-RestMethod -Method Get `
 
 ```powershell
 Invoke-RestMethod -Method Get `
-  -Uri 'https://linshiyouxiang.zsxh.dpdns.org/admin/address?address=bd2p3a1m@zsxh.dpdns.org&limit=1&offset=0' `
-  -Headers @{ 'x-admin-auth' = '314119Aa' }
+  -Uri 'https://<your-worker>/admin/address?address=test@your-domain.com&limit=1&offset=0' `
+  -Headers @{ 'x-admin-auth' = '<your-admin-password>' }
 ```
 
 ## 从最新邮件中提取关键信息
@@ -77,8 +85,8 @@ Invoke-RestMethod -Method Get `
 
 ```powershell
 $res = Invoke-RestMethod -Method Get `
-  -Uri 'https://linshiyouxiang.zsxh.dpdns.org/admin/mails?address=bd2p3a1m@zsxh.dpdns.org&limit=1&offset=0' `
-  -Headers @{ 'x-admin-auth' = '314119Aa' }
+  -Uri 'https://<your-worker>/admin/mails?address=test@your-domain.com&limit=1&offset=0' `
+  -Headers @{ 'x-admin-auth' = '<your-admin-password>' }
 
 $raw = $res.results[0].raw
 $code = [regex]::Match($raw, '(?<!\d)\d{4,8}(?!\d)').Value
@@ -93,7 +101,7 @@ $code
 
 ```powershell
 . .\mail-tools.ps1
-Get-LatestMailCode -Address 'bd2p3a1m@zsxh.dpdns.org'
+Get-LatestMailCode -Address 'test@your-domain.com' -WorkerBaseUrl 'https://<your-worker>' -AdminAuth '<your-admin-password>'
 ```
 
 返回值：
@@ -103,11 +111,10 @@ Get-LatestMailCode -Address 'bd2p3a1m@zsxh.dpdns.org'
 
 ### 当前已验证样例
 
-- 邮箱：`bd2p3a1m@zsxh.dpdns.org`
+- 邮箱：`test@your-domain.com`
 - 发件人：`DeepSeek <support@sc.mail.deepseek.com>`
 - 主题：`DeepSeek 验证码`
-- 时间：`2026-03-30 02:58:43`
-- 提取结果：`760279`
+- 提取结果：`760279`（示例）
 
 ### 建议提取字段
 

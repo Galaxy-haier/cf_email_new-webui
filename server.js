@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -7,9 +8,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const WORKER_URL = 'https://linshiyouxiang.zsxh.dpdns.org';
-const ADMIN_AUTH = '314119Aa';
-const DOMAIN = 'zsxh.dpdns.org';
+const WORKER_URL = process.env.WORKER_URL;
+const ADMIN_AUTH = process.env.ADMIN_AUTH;
+const DOMAIN = process.env.DEFAULT_DOMAIN;
+
+if (!WORKER_URL || !ADMIN_AUTH) {
+    console.error('错误: 请在 .env 文件中配置 WORKER_URL 和 ADMIN_AUTH');
+    process.exit(1);
+}
 
 // 创建邮箱
 app.post('/api/create', async (req, res) => {
@@ -42,7 +48,11 @@ app.get('/api/domains', async (req, res) => {
         const domains = data.domains || data.defaultDomains || [DOMAIN];
         res.json({ domains });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        if (DOMAIN) {
+            res.json({ domains: [DOMAIN] });
+        } else {
+            res.status(500).json({ error: err.message });
+        }
     }
 });
 
