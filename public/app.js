@@ -331,8 +331,18 @@ function renderMails(mails, highlightNew = false) {
     });
 }
 
+function wrapIncompleteHtml(html) {
+    if (!html) return html;
+    if (/<html\b/i.test(html) && /<body\b/i.test(html)) return html;
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}</style></head><body>${html}</body></html>`;
+}
+
 function showMailDetail(mail) {
     const code = extractCode(mail.raw);
+    const htmlContent = extractHtmlFromRaw(mail.raw);
+    const hasHtml = !!htmlContent;
+    const processedHtml = wrapIncompleteHtml(htmlContent);
+
     mailModalBody.innerHTML = `
         <div class="mail-detail-header">
             <div class="mail-detail-row">
@@ -350,8 +360,47 @@ function showMailDetail(mail) {
             <div class="mail-detail-subject">${escapeHtml(mail.subject || '（无主题）')}</div>
             ${code ? `<div class="mail-detail-code"><i class="fas fa-shield-alt"></i>${code}</div>` : ''}
         </div>
-        <div class="mail-raw-content">${escapeHtml(mail.raw || '（无内容）')}</div>
+        <div class="mail-view-toggle">
+            <button class="toggle-btn ${hasHtml ? '' : 'active'}" data-view="raw">
+                <i class="fas fa-code"></i> 原始邮件
+            </button>
+            ${hasHtml ? `<button class="toggle-btn active" data-view="html"><i class="fab fa-html5"></i> HTML 预览</button>` : ''}
+        </div>
+        <div class="mail-view-content">
+            <div class="mail-view-panel ${hasHtml ? '' : 'active'}" id="rawPanel">
+                <div class="mail-raw-content">${escapeHtml(mail.raw || '（无内容）')}</div>
+            </div>
+            ${hasHtml ? `
+            <div class="mail-view-panel active" id="htmlPanel">
+                <div class="mail-html-frame-placeholder"></div>
+            </div>
+            ` : ''}
+        </div>
     `;
+
+    if (hasHtml && processedHtml) {
+        const htmlPanel = mailModalBody.querySelector('#htmlPanel');
+        if (htmlPanel) {
+            const iframe = document.createElement('iframe');
+            iframe.className = 'mail-html-frame';
+            iframe.sandbox = '';
+            iframe.srcdoc = processedHtml;
+            htmlPanel.innerHTML = '';
+            htmlPanel.appendChild(iframe);
+        }
+    }
+
+    mailModalBody.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const view = btn.dataset.view;
+            mailModalBody.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            mailModalBody.querySelectorAll('.mail-view-panel').forEach(p => p.classList.remove('active'));
+            const panel = mailModalBody.querySelector('#' + view + 'Panel');
+            if (panel) panel.classList.add('active');
+        });
+    });
+
     mailModal.classList.add('active');
 }
 
@@ -360,6 +409,78 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function extractBodyFromPart(part) {
+    const idx = part.search(/\r?\n\r?\n/);
+    return idx >= 0 ? part.slice(idx + 2).trim() : null;
+}
+
+function getCharset(part) {
+    const m = part.match(/charset=["']?([^"'\s;]+)["']?/i);
+    return m ? m[1].toLowerCase() : 'utf-8';
+}
+
+function bytesToString(binary, charset) {
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    try {
+        return new TextDecoder(charset).decode(bytes);
+    } catch {
+        return new TextDecoder('utf-8').decode(bytes);
+    }
+}
+
+function decodeContent(body, part) {
+    const cte = part.match(/Content-Transfer-Encoding:\s*([^\s;]+)/i);
+    const encoding = cte ? cte[1].toLowerCase() : '';
+    const charset = getCharset(part);
+
+    if (encoding === 'base64') {
+        try {
+            const cleaned = body.replace(/\s/g, '');
+            return bytesToString(atob(cleaned), charset);
+        } catch {
+            return body;
+        }
+    }
+    if (encoding === 'quoted-printable') {
+        const decoded = body
+            .replace(/=\r?\n/g, '')
+            .replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+        return bytesToString(decoded, charset);
+    }
+    return body;
+}
+
+function extractHtmlFromRaw(raw) {
+    if (!raw) return null;
+
+    const boundaryMatch = raw.match(/boundary=["']?([^"'\s;]+)["']?/i);
+    if (boundaryMatch) {
+        const boundary = boundaryMatch[1];
+        const escapedBoundary = boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const parts = raw.split(new RegExp(`--${escapedBoundary}(?:--)?`));
+
+        for (const part of parts) {
+            if (/Content-Type:\s*text\/html/i.test(part)) {
+                const body = extractBodyFromPart(part);
+                if (body) return decodeContent(body, part);
+            }
+        }
+    }
+
+    if (/Content-Type:\s*text\/html/i.test(raw)) {
+        const body = extractBodyFromPart(raw);
+        if (body) return decodeContent(body, raw);
+    }
+
+    const body = extractBodyFromPart(raw);
+    if (body && /<[a-z][\s\S]*>/i.test(body)) {
+        return body;
+    }
+
+    return null;
 }
 
 // ========== 历史记录弹窗 ==========
