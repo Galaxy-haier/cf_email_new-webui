@@ -825,9 +825,16 @@ header {
     color: var(--text-muted);
 }
 
+#historyModal .modal-body {
+    display: flex;
+    flex-direction: column;
+    overflow-y: hidden;
+}
+
 .history-list {
-    max-height: 50vh;
+    flex: 1;
     overflow-y: auto;
+    min-height: 0;
 }
 
 .history-item {
@@ -859,7 +866,6 @@ header {
 
 .history-item:hover {
     background: var(--bg-hover);
-    transform: translateX(4px);
     border-color: rgba(244, 114, 182, 0.3);
 }
 
