@@ -1,5 +1,5 @@
 {
-  "name": "temp-mail-console",
+  "name": "cf_email_new-webui",
   "version": "1.0.0",
   "description": "临时邮箱控制台 - 一键生成、刷新、提取验证码",
   "main": "server.js",
