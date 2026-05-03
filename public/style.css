@@ -95,6 +95,8 @@ header {
 
 /* Main Card */
 .main-card {
+    position: relative;
+    z-index: 1;
     background: var(--bg-card);
     backdrop-filter: blur(20px);
     border: 1px solid var(--border);
