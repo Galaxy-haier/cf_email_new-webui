@@ -49,6 +49,20 @@ const historyCount = document.getElementById('historyCount');
 const historySearch = document.getElementById('historySearch');
 const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 
+// AI 设置弹窗
+const settingsBtn = document.getElementById('settingsBtn');
+const aiSettingsModal = document.getElementById('aiSettingsModal');
+const aiSettingsClose = document.getElementById('aiSettingsClose');
+const aiSettingsCancel = document.getElementById('aiSettingsCancel');
+const aiSettingsSave = document.getElementById('aiSettingsSave');
+const aiEnabledToggle = document.getElementById('aiEnabledToggle');
+const aiApiUrl = document.getElementById('aiApiUrl');
+const aiApiKey = document.getElementById('aiApiKey');
+const aiApiKeyToggle = document.getElementById('aiApiKeyToggle');
+const aiModel = document.getElementById('aiModel');
+const fetchModelsBtn = document.getElementById('fetchModelsBtn');
+const aiModelSelect = document.getElementById('aiModelSelect');
+
 // ========== 工具函数 ==========
 function showToast(msg, icon = 'fa-check-circle') {
     toastMsg.textContent = msg;
@@ -90,6 +104,15 @@ function extractCode(raw) {
     }
     const generic = raw.match(/(?<!\d)\d{4,8}(?!\d)/);
     return generic ? generic[0] : null;
+}
+
+function normalizeAIUrl(url) {
+    if (!url) return '';
+    url = url.trim().replace(/\/+$/, '');
+    if (!url.endsWith('/v1')) {
+        url += '/v1';
+    }
+    return url;
 }
 
 function getSenderInitial(from) {
@@ -156,6 +179,23 @@ function clearAllHistory() {
     showToast('历史记录已清空');
 }
 
+// ========== AI 配置管理 ==========
+const AI_CONFIG_KEY = 'temp_mail_ai_config';
+
+function getAIConfig() {
+    try {
+        const raw = localStorage.getItem(AI_CONFIG_KEY);
+        const defaults = { enabled: false, url: '', apiKey: '', model: '' };
+        return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;
+    } catch {
+        return { enabled: false, url: '', apiKey: '', model: '' };
+    }
+}
+
+function saveAIConfig(config) {
+    localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(config));
+}
+
 function formatRelativeTime(ts) {
     const diff = Date.now() - ts;
     const sec = Math.floor(diff / 1000);
@@ -212,6 +252,168 @@ async function fetchMails(address) {
     const res = await fetch(`/api/mails?address=${encodeURIComponent(address)}&limit=20&offset=0`);
     if (!res.ok) throw new Error('获取邮件失败');
     return res.json();
+}
+
+// ========== AI 识别 ==========
+async function fetchModels(url, apiKey) {
+    const normalizedUrl = normalizeAIUrl(url);
+    if (!normalizedUrl || !apiKey) {
+        showToast('请先填写 API 地址和 API Key', 'fa-exclamation-circle');
+        return [];
+    }
+    try {
+        const response = await fetch(`${normalizedUrl}/models`, {
+            headers: { 'Authorization': `Bearer ${apiKey.trim()}` }
+        });
+        if (!response.ok) throw new Error('获取模型列表失败');
+        const data = await response.json();
+        const models = data.data?.map(m => m.id) || [];
+        if (models.length === 0) throw new Error('未获取到模型列表');
+        return models;
+    } catch (err) {
+        showToast(err.message, 'fa-exclamation-circle');
+        return [];
+    }
+}
+
+async function extractCodeWithAI(raw) {
+    const config = getAIConfig();
+    if (!config.enabled || !config.url || !config.apiKey || !config.model) return null;
+
+    const url = normalizeAIUrl(config.url);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    try {
+        const response = await fetch(`${url}/chat/completions`, {
+            method: 'POST',
+            signal: controller.signal,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.apiKey}`
+            },
+            body: JSON.stringify({
+                model: config.model,
+                messages: [
+                    {
+                        role: 'system',
+                        content: '你是一个验证码提取助手。你的唯一任务是从邮件内容中提取验证码、确认码或授权码。请只返回验证码本身，不要返回任何解释、引号、格式标记或多余内容。如果邮件中没有验证码，请只返回一个空字符串，不要返回"无"或"未找到"等文字。'
+                    },
+                    {
+                        role: 'user',
+                        content: `请从以下邮件内容中提取验证码（通常为4-8位数字或字母组合），只返回验证码本身，不要其他任何内容：\n\n${(raw || '').slice(0, 8000)}`
+                    }
+                ],
+                temperature: 0.1,
+                max_tokens: 50
+            })
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            const errText = await response.text();
+            console.error('AI API 错误:', errText);
+            return null;
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content?.trim();
+        if (!content || content === '') return null;
+
+        const cleaned = content.replace(/^["'`]+|["'`]+$/g, '').replace(/```[\s\S]*?```/g, '').trim();
+        if (!cleaned || cleaned.length === 0) return null;
+
+        if (/^[A-Za-z0-9]{3,12}$/.test(cleaned)) {
+            return cleaned;
+        }
+
+        const extracted = cleaned.match(/[A-Za-z0-9]{3,12}/);
+        if (extracted) return extracted[0];
+
+        return null;
+    } catch (err) {
+        if (err.name === 'AbortError') {
+            console.log('AI 请求超时');
+        } else {
+            console.error('AI 识别出错:', err);
+        }
+        return null;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+// AI 请求队列（并发控制）
+let aiQueue = [];
+let aiRunningCount = 0;
+const MAX_AI_CONCURRENT = 2;
+const aiProcessingIds = new Set();
+const aiCodeCache = new Map();
+
+async function processAIQueue() {
+    if (aiRunningCount >= MAX_AI_CONCURRENT || aiQueue.length === 0) return;
+    aiRunningCount++;
+    const task = aiQueue.shift();
+    let code = null;
+    try {
+        code = await extractCodeWithAI(task.raw);
+        if (code) {
+            aiCodeCache.set(task.mailId, code);
+        }
+    } catch (e) {
+        // 静默失败
+    }
+    if (typeof task.onSuccess === 'function') {
+        task.onSuccess(code);
+    }
+    aiProcessingIds.delete(task.mailId);
+    aiRunningCount--;
+    processAIQueue();
+}
+
+function enqueueAIExtract(mailId, raw, onSuccess) {
+    if (aiCodeCache.has(mailId)) {
+        onSuccess(aiCodeCache.get(mailId));
+        return;
+    }
+    if (aiProcessingIds.has(mailId)) return;
+    aiProcessingIds.add(mailId);
+    aiQueue.push({ mailId, raw, onSuccess });
+    processAIQueue();
+}
+
+function updateMailCode(mailId, code) {
+    const section = document.querySelector(`.mail-code-section[data-mail-id="${mailId}"]`);
+    if (section) {
+        if (!code) {
+            section.innerHTML = '<span class="no-code"><i class="fas fa-times-circle"></i> 未识别到验证码</span>';
+        } else {
+            section.innerHTML = `
+                <div class="code-badge ai-detected"><i class="fas fa-robot"></i>${escapeHtml(code)}</div>
+                <button class="code-copy-btn" data-code="${escapeHtml(code)}" title="复制验证码"><i class="fas fa-copy"></i></button>
+            `;
+            const btn = section.querySelector('.code-copy-btn');
+            if (btn) {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(code).then(() => {
+                        showToast(`验证码 ${code} 已复制`);
+                    });
+                });
+            }
+        }
+    }
+    // 同步更新详情弹窗（如果当前已打开）
+    const detailCode = document.getElementById(`detailCode_${mailId}`);
+    if (detailCode) {
+        if (!code) {
+            detailCode.style.display = 'none';
+        } else {
+            detailCode.classList.remove('ai-detecting');
+            detailCode.innerHTML = `<i class="fas fa-robot"></i>${escapeHtml(code)}`;
+        }
+    }
 }
 
 // ========== 核心功能 ==========
@@ -283,7 +485,7 @@ function renderMails(mails, highlightNew = false) {
     }
 
     mailsList.innerHTML = mails.map((mail, idx) => {
-        const code = extractCode(mail.raw);
+        const aiEnabled = getAIConfig().enabled;
         const isNew = highlightNew && idx === 0;
         return `
             <div class="mail-card ${isNew ? 'new-mail' : ''}" data-id="${mail.id}">
@@ -298,10 +500,9 @@ function renderMails(mails, highlightNew = false) {
                     <div class="mail-time">${formatTime(mail.created_at)}</div>
                 </div>
                 <div class="mail-subject">${escapeHtml(mail.subject || '（无主题）')}</div>
-                <div class="mail-code-section">
-                    ${code
-                        ? `<div class="code-badge"><i class="fas fa-shield-alt"></i>${code}</div>
-                           <button class="code-copy-btn" data-code="${code}" title="复制验证码"><i class="fas fa-copy"></i></button>`
+                <div class="mail-code-section" data-mail-id="${mail.id}">
+                    ${aiEnabled
+                        ? `<span class="ai-pending"><i class="fas fa-robot fa-spin"></i> AI 识别中...</span>`
                         : '<span class="no-code"><i class="fas fa-times-circle"></i> 未识别到验证码</span>'
                     }
                 </div>
@@ -327,6 +528,15 @@ function renderMails(mails, highlightNew = false) {
             });
         });
     });
+
+    // 统一走 AI 识别
+    mails.forEach(mail => {
+        if (getAIConfig().enabled) {
+            enqueueAIExtract(mail.id, mail.raw, (code) => {
+                updateMailCode(mail.id, code);
+            });
+        }
+    });
 }
 
 function wrapIncompleteHtml(html) {
@@ -336,10 +546,10 @@ function wrapIncompleteHtml(html) {
 }
 
 function showMailDetail(mail) {
-    const code = extractCode(mail.raw);
     const htmlContent = extractHtmlFromRaw(mail.raw);
     const hasHtml = !!htmlContent;
     const processedHtml = wrapIncompleteHtml(htmlContent);
+    const aiEnabled = getAIConfig().enabled;
 
     mailModalBody.innerHTML = `
         <div class="mail-detail-header">
@@ -356,7 +566,10 @@ function showMailDetail(mail) {
                 <span class="mail-detail-value">${formatTime(mail.created_at)}</span>
             </div>
             <div class="mail-detail-subject">${escapeHtml(mail.subject || '（无主题）')}</div>
-            ${code ? `<div class="mail-detail-code"><i class="fas fa-shield-alt"></i>${code}</div>` : ''}
+            ${aiEnabled
+                ? `<div class="mail-detail-code ai-detecting" id="detailCode_${mail.id}"><i class="fas fa-robot fa-spin"></i> AI 识别中...</div>`
+                : ''
+            }
         </div>
         <div class="mail-view-toggle">
             <button class="toggle-btn ${hasHtml ? '' : 'active'}" data-view="raw">
@@ -398,6 +611,20 @@ function showMailDetail(mail) {
             if (panel) panel.classList.add('active');
         });
     });
+
+    // 详情页统一走 AI 识别
+    if (aiEnabled) {
+        enqueueAIExtract(mail.id, mail.raw, (aiCode) => {
+            const detailCode = document.getElementById(`detailCode_${mail.id}`);
+            if (!detailCode) return;
+            if (!aiCode) {
+                detailCode.style.display = 'none';
+            } else {
+                detailCode.classList.remove('ai-detecting');
+                detailCode.innerHTML = `<i class="fas fa-robot"></i>${escapeHtml(aiCode)}`;
+            }
+        });
+    }
 
     mailModal.classList.add('active');
 }
@@ -675,6 +902,74 @@ clearHistoryBtn.addEventListener('click', () => {
     if (confirm(`确定要清空全部 ${historyData.length} 条历史记录吗？`)) {
         clearAllHistory();
     }
+});
+
+// ========== AI 设置弹窗 ==========
+function openAISettings() {
+    const config = getAIConfig();
+    aiEnabledToggle.checked = config.enabled;
+    aiApiUrl.value = config.url;
+    aiApiKey.value = config.apiKey;
+    aiModel.value = config.model;
+    aiModelSelect.style.display = 'none';
+    aiModelSelect.innerHTML = '<option value="">-- 选择模型 --</option>';
+    aiSettingsModal.classList.add('active');
+}
+
+function closeAISettings() {
+    aiSettingsModal.classList.remove('active');
+}
+
+settingsBtn.addEventListener('click', openAISettings);
+aiSettingsClose.addEventListener('click', closeAISettings);
+aiSettingsCancel.addEventListener('click', closeAISettings);
+aiSettingsModal.addEventListener('click', (e) => {
+    if (e.target === aiSettingsModal) closeAISettings();
+});
+
+aiApiKeyToggle.addEventListener('click', () => {
+    const isPassword = aiApiKey.type === 'password';
+    aiApiKey.type = isPassword ? 'text' : 'password';
+    aiApiKeyToggle.querySelector('i').className = isPassword ? 'fas fa-eye-slash' : 'fas fa-eye';
+});
+
+fetchModelsBtn.addEventListener('click', async () => {
+    fetchModelsBtn.disabled = true;
+    fetchModelsBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 获取中...';
+
+    const models = await fetchModels(aiApiUrl.value, aiApiKey.value);
+
+    fetchModelsBtn.disabled = false;
+    fetchModelsBtn.innerHTML = '<i class="fas fa-list"></i> 获取模型列表';
+
+    if (models.length > 0) {
+        aiModelSelect.innerHTML = '<option value="">-- 选择模型 --</option>' +
+            models.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+        aiModelSelect.style.display = 'block';
+        aiModelSelect.value = aiModel.value || '';
+    }
+});
+
+aiModelSelect.addEventListener('change', () => {
+    if (aiModelSelect.value) {
+        aiModel.value = aiModelSelect.value;
+    }
+});
+
+aiSettingsSave.addEventListener('click', () => {
+    const url = aiApiUrl.value.trim();
+    const apiKey = aiApiKey.value.trim();
+    const model = aiModel.value.trim();
+    const enabled = aiEnabledToggle.checked;
+
+    if (enabled && (!url || !apiKey || !model)) {
+        showToast('启用 AI 识别需要填写完整的 API 地址、Key 和模型名', 'fa-exclamation-circle');
+        return;
+    }
+
+    saveAIConfig({ enabled, url, apiKey, model });
+    closeAISettings();
+    showToast('AI 设置已保存');
 });
 
 // ========== 自定义下拉菜单 ==========

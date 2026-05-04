@@ -16,6 +16,9 @@
                 <h1>临时邮箱控制台</h1>
             </div>
             <p class="subtitle">一键生成 · 自动刷新 · 智能提取验证码</p>
+            <button class="settings-btn" id="settingsBtn" title="AI 设置">
+                <i class="fas fa-cog"></i>
+            </button>
         </header>
 
         <div class="main-card">
@@ -154,6 +157,60 @@
                 <button class="modal-close" id="mailModalClose">&times;</button>
             </div>
             <div class="modal-body" id="mailModalBody">
+            </div>
+        </div>
+    </div>
+
+    <!-- AI 设置弹窗 -->
+    <div class="modal" id="aiSettingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-robot"></i> AI 验证码识别设置</h3>
+                <button class="modal-close" id="aiSettingsClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="ai-setting-item">
+                    <label class="switch-label-flex">
+                        <span>启用 AI 识别</span>
+                        <label class="switch">
+                            <input type="checkbox" id="aiEnabledToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </label>
+                    <p class="setting-desc">开启后，正则未识别到验证码时将自动调用 AI 进行识别</p>
+                </div>
+                <div class="ai-setting-item">
+                    <label>API 地址</label>
+                    <input type="text" id="aiApiUrl" placeholder="https://api.example.com/v1">
+                    <p class="setting-desc">OpenAI 兼容格式的 API 地址</p>
+                </div>
+                <div class="ai-setting-item">
+                    <label>API Key</label>
+                    <div class="password-input-group">
+                        <input type="password" id="aiApiKey" placeholder="sk-...">
+                        <button class="password-toggle" id="aiApiKeyToggle" type="button">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <p class="setting-desc">API 密钥保存在浏览器本地，请妥善保管</p>
+                </div>
+                <div class="ai-setting-item">
+                    <label>模型名称</label>
+                    <div class="model-select-group">
+                        <input type="text" id="aiModel" placeholder="gpt-4o-mini">
+                        <button class="btn btn-sm btn-secondary" id="fetchModelsBtn">
+                            <i class="fas fa-list"></i> 获取模型列表
+                        </button>
+                    </div>
+                    <select class="model-select" id="aiModelSelect" style="display:none;">
+                        <option value="">-- 选择模型 --</option>
+                    </select>
+                    <p class="setting-desc">点击"获取模型列表"从 API 加载可用模型并选择</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="aiSettingsCancel">取消</button>
+                <button class="btn btn-primary" id="aiSettingsSave">保存</button>
             </div>
         </div>
     </div>
