@@ -62,6 +62,8 @@ const aiApiKeyToggle = document.getElementById('aiApiKeyToggle');
 const aiModel = document.getElementById('aiModel');
 const fetchModelsBtn = document.getElementById('fetchModelsBtn');
 const aiModelSelect = document.getElementById('aiModelSelect');
+const testAIConnectionBtn = document.getElementById('testAIConnectionBtn');
+const aiTestResult = document.getElementById('aiTestResult');
 
 // ========== 工具函数 ==========
 function showToast(msg, icon = 'fa-check-circle') {
@@ -255,6 +257,113 @@ async function fetchMails(address) {
 }
 
 // ========== AI 识别 ==========
+
+// 解析 AI 响应：兼容标准 JSON 和 SSE (Server-Sent Events) 流式格式
+function parseAIResponseBody(text) {
+    text = text.trim();
+    // 先尝试标准 JSON
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        // 不是标准 JSON，继续尝试 SSE
+    }
+
+    // SSE 解析：逐行处理 data: 开头的行
+    const lines = text.split('\n');
+    let fullContent = '';
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const data = trimmed.slice(5).trim();
+        if (data === '[DONE]') continue;
+        try {
+            const json = JSON.parse(data);
+            // 流式 SSE：delta.content
+            if (json.choices?.[0]?.delta?.content) {
+                fullContent += json.choices[0].delta.content;
+            }
+            // 非流式 SSE：message.content（取第一个即完整内容）
+            else if (json.choices?.[0]?.message?.content) {
+                fullContent = json.choices[0].message.content;
+                break;
+            }
+        } catch (e) {
+            // 忽略无法解析的行
+        }
+    }
+
+    if (fullContent) {
+        return { choices: [{ message: { content: fullContent } }] };
+    }
+    return null;
+}
+async function testAIConnection() {
+    const url = aiApiUrl.value.trim();
+    const apiKey = aiApiKey.value.trim();
+    const model = aiModel.value.trim();
+
+    if (!url || !apiKey || !model) {
+        showToast('请先填写 API 地址、API Key 和模型名称', 'fa-exclamation-circle');
+        return;
+    }
+
+    testAIConnectionBtn.disabled = true;
+    testAIConnectionBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 测试中...';
+    aiTestResult.style.display = 'none';
+    aiTestResult.className = 'test-result';
+
+    const normalizedUrl = normalizeAIUrl(url);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const startTime = performance.now();
+
+    try {
+        const response = await fetch(`${normalizedUrl}/chat/completions`, {
+            method: 'POST',
+            signal: controller.signal,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: model,
+                messages: [
+                    { role: 'user', content: 'Hi' }
+                ],
+                max_tokens: 5
+            })
+        });
+
+        clearTimeout(timeoutId);
+        const latency = Math.round(performance.now() - startTime);
+
+        if (!response.ok) {
+            const errText = await response.text();
+            aiTestResult.innerHTML = `<span class="test-error"><i class="fas fa-times-circle"></i> 连接失败 (${response.status}ms)</span><span class="test-detail">${escapeHtml(errText.slice(0, 200))}</span>`;
+            aiTestResult.className = 'test-result test-error-box';
+            showToast('模型连接测试失败', 'fa-exclamation-circle');
+        } else {
+            aiTestResult.innerHTML = `<span class="test-success"><i class="fas fa-check-circle"></i> 连接成功 · ${latency}ms</span>`;
+            aiTestResult.className = 'test-result test-success-box';
+            showToast(`模型连接正常 · 延迟 ${latency}ms`);
+        }
+    } catch (err) {
+        clearTimeout(timeoutId);
+        const latency = Math.round(performance.now() - startTime);
+        if (err.name === 'AbortError') {
+            aiTestResult.innerHTML = `<span class="test-error"><i class="fas fa-times-circle"></i> 请求超时 (15s)</span>`;
+        } else {
+            aiTestResult.innerHTML = `<span class="test-error"><i class="fas fa-times-circle"></i> 请求失败 · ${latency}ms</span><span class="test-detail">${escapeHtml(err.message)}</span>`;
+        }
+        aiTestResult.className = 'test-result test-error-box';
+        showToast('模型连接测试失败', 'fa-exclamation-circle');
+    } finally {
+        testAIConnectionBtn.disabled = false;
+        testAIConnectionBtn.innerHTML = '<i class="fas fa-vial"></i> 测试连接';
+        aiTestResult.style.display = 'block';
+    }
+}
+
 async function fetchModels(url, apiKey) {
     const normalizedUrl = normalizeAIUrl(url);
     if (!normalizedUrl || !apiKey) {
@@ -297,11 +406,11 @@ async function extractCodeWithAI(raw) {
                 messages: [
                     {
                         role: 'system',
-                        content: '你是一个验证码提取助手。你的唯一任务是从邮件内容中提取验证码、确认码或授权码。请只返回验证码本身，不要返回任何解释、引号、格式标记或多余内容。如果邮件中没有验证码，请只返回一个空字符串，不要返回"无"或"未找到"等文字。'
+                        content: '你是一个验证码提取助手。你的唯一任务是从邮件内容中提取验证码、确认码或授权码。\n\n规则（严格遵守）：\n1. 只返回验证码本身，不要任何解释、引号、markdown 或多余内容。\n2. 邮件可能是中文或英文的，验证码通常隐藏在正文中。\n3. 支持包含连字符(-)或下划线(_)的验证码，如 2DO-VPH、DF6-2IO、ABC_DEF。\n4. 如果邮件中没有验证码，只返回 NONE，不要返回其他文字。'
                     },
                     {
                         role: 'user',
-                        content: `请从以下邮件内容中提取验证码（通常为4-8位数字或字母组合），只返回验证码本身，不要其他任何内容：\n\n${(raw || '').slice(0, 8000)}`
+                        content: `请从以下邮件内容中提取验证码（通常为 4-8 位数字、字母或带连字符的组合），只返回验证码本身，不要其他任何内容。如果找不到，返回 NONE：\n\n${(raw || '').slice(0, 8000)}`
                     }
                 ],
                 temperature: 0.1,
@@ -313,24 +422,70 @@ async function extractCodeWithAI(raw) {
 
         if (!response.ok) {
             const errText = await response.text();
-            console.error('AI API 错误:', errText);
+            console.error('AI API 错误:', response.status, errText);
             return null;
         }
 
-        const data = await response.json();
-        const content = data.choices?.[0]?.message?.content?.trim();
-        if (!content || content === '') return null;
+        const text = await response.text();
+        const data = parseAIResponseBody(text);
+        if (!data) {
+            console.error('AI API 返回无法解析:', text.slice(0, 500));
+            return null;
+        }
+        let content = data.choices?.[0]?.message?.content;
+        console.log('AI 原始返回:', JSON.stringify(content));
 
-        const cleaned = content.replace(/^["'`]+|["'`]+$/g, '').replace(/```[\s\S]*?```/g, '').trim();
+        if (!content || content === '') return null;
+        content = String(content).trim();
+
+        // 如果模型明确返回 NONE，视为未找到
+        if (content.toUpperCase() === 'NONE') return null;
+
+        // 深度清理：去除 markdown、引号、换行、空格、冒号、中文前缀等格式字符
+        let cleaned = content
+            .replace(/^["'`]+|["'`]+$/g, '')
+            .replace(/```[\s\S]*?```/g, '')
+            .replace(/`([^`]+)`/g, '$1')
+            .replace(/\*\*([^*]+)\*\*/g, '$1')
+            .replace(/\*([^*]+)\*/g, '$1')
+            // 去除常见中文前缀，如"你的验证码是"、"验证码："等
+            .replace(/^[^\dA-Za-z]*验证码[是：:为\s]*/i, '')
+            .replace(/^[^\dA-Za-z]*[Cc]ode[是：:为\s]*/i, '')
+            .replace(/^\s*[:：]\s*/, '')
+            .replace(/\s+/g, '')
+            .trim();
+
+        console.log('AI 清理后:', JSON.stringify(cleaned));
+
         if (!cleaned || cleaned.length === 0) return null;
 
+        // 尝试匹配纯字母数字验证码（3-12位）
         if (/^[A-Za-z0-9]{3,12}$/.test(cleaned)) {
+            console.log('AI 识别到验证码:', cleaned);
             return cleaned;
         }
 
-        const extracted = cleaned.match(/[A-Za-z0-9]{3,12}/);
-        if (extracted) return extracted[0];
+        // 支持连字符(-)和下划线(_)的验证码，如 2DO-VPH、ABC_DEF（3-16位）
+        if (/^[A-Za-z0-9\-_]{3,16}$/.test(cleaned)) {
+            console.log('AI 识别到验证码:', cleaned);
+            return cleaned;
+        }
 
+        // 从清理后的内容中提取带分隔符的验证码，如 ABC-DEF、A1B2_C3
+        const extracted = cleaned.match(/[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*/);
+        if (extracted && extracted[0].length >= 3 && extracted[0].length <= 16) {
+            console.log('AI 提取到验证码:', extracted[0]);
+            return extracted[0];
+        }
+
+        // 最后的兜底：匹配纯字母数字
+        const fallback = cleaned.match(/[A-Za-z0-9]{3,12}/);
+        if (fallback) {
+            console.log('AI fallback 提取到验证码:', fallback[0]);
+            return fallback[0];
+        }
+
+        console.log('AI 未识别到有效验证码，原始返回:', content);
         return null;
     } catch (err) {
         if (err.name === 'AbortError') {
@@ -358,12 +513,11 @@ async function processAIQueue() {
     let code = null;
     try {
         code = await extractCodeWithAI(task.raw);
-        if (code) {
-            aiCodeCache.set(task.mailId, code);
-        }
     } catch (e) {
         // 静默失败
     }
+    // 缓存结果（包括 null），避免重复请求同一封邮件
+    aiCodeCache.set(task.mailId, code);
     if (typeof task.onSuccess === 'function') {
         task.onSuccess(code);
     }
@@ -612,18 +766,23 @@ function showMailDetail(mail) {
         });
     });
 
-    // 详情页统一走 AI 识别
+    // 详情页复用邮件列表的 AI 识别结果，不再重复请求
     if (aiEnabled) {
-        enqueueAIExtract(mail.id, mail.raw, (aiCode) => {
-            const detailCode = document.getElementById(`detailCode_${mail.id}`);
-            if (!detailCode) return;
-            if (!aiCode) {
+        const cachedCode = aiCodeCache.get(mail.id);
+        const detailCode = document.getElementById(`detailCode_${mail.id}`);
+        if (detailCode) {
+            if (cachedCode === undefined) {
+                // 邮件列表中尚未完成识别，保持"识别中"状态，等待 updateMailCode 更新
+                detailCode.innerHTML = `<i class="fas fa-robot fa-spin"></i> AI 识别中...`;
+            } else if (cachedCode === null) {
+                // 已识别但未找到验证码
                 detailCode.style.display = 'none';
             } else {
+                // 已识别到验证码
                 detailCode.classList.remove('ai-detecting');
-                detailCode.innerHTML = `<i class="fas fa-robot"></i>${escapeHtml(aiCode)}`;
+                detailCode.innerHTML = `<i class="fas fa-robot"></i>${escapeHtml(cachedCode)}`;
             }
-        });
+        }
     }
 
     mailModal.classList.add('active');
@@ -955,6 +1114,8 @@ aiModelSelect.addEventListener('change', () => {
         aiModel.value = aiModelSelect.value;
     }
 });
+
+testAIConnectionBtn.addEventListener('click', testAIConnection);
 
 aiSettingsSave.addEventListener('click', () => {
     const url = aiApiUrl.value.trim();

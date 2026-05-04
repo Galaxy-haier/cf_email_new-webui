@@ -207,6 +207,14 @@
                     </select>
                     <p class="setting-desc">点击"获取模型列表"从 API 加载可用模型并选择</p>
                 </div>
+                <div class="ai-setting-item">
+                    <label>连接测试</label>
+                    <button class="btn btn-sm btn-secondary" id="testAIConnectionBtn">
+                        <i class="fas fa-vial"></i> 测试连接
+                    </button>
+                    <div class="test-result" id="aiTestResult" style="display:none;"></div>
+                    <p class="setting-desc">测试当前配置的模型是否可以正常调用</p>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="aiSettingsCancel">取消</button>
